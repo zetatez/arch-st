@@ -105,6 +105,7 @@ typedef struct {
 	XSetWindowAttributes attrs;
 	int scr;
 	int isfixed; /* is fixed geometry? */
+	int depth; /* bit depth */                                          // st-focus
 	int l, t; /* left and top offset */
 	int gm; /* geometry mask */
 } XWindow;
@@ -243,6 +244,7 @@ static char *usedfont = NULL;
 static double usedfontsize = 0;
 static double defaultfontsize = 0;
 
+static char *opt_alpha = NULL;                                                 // st-focus
 static char *opt_class = NULL;
 static char **opt_cmd  = NULL;
 static char *opt_embed = NULL;
@@ -251,6 +253,8 @@ static char *opt_io    = NULL;
 static char *opt_line  = NULL;
 static char *opt_name  = NULL;
 static char *opt_title = NULL;
+
+static int focused = 0;                                                        // st-focus
 
 static uint buttons; /* bit field of pressed buttons */
 
@@ -756,7 +760,8 @@ xresize(int col, int row)
 
 	XFreePixmap(xw.dpy, xw.buf);
 	xw.buf = XCreatePixmap(xw.dpy, xw.win, win.w, win.h,
-			DefaultDepth(xw.dpy, xw.scr));
+			xw.depth);                                                         // st-focus
+			// DefaultDepth(xw.dpy, xw.scr));                                  // st-focus
 	XftDrawChange(xw.draw, xw.buf);
 	xclear(0, 0, win.w, win.h);
 
@@ -794,28 +799,50 @@ xloadcolor(int i, const char *name, Color *ncolor)
 	return XftColorAllocName(xw.dpy, xw.vis, xw.cmap, name, ncolor);
 }
 
+void                                                                      // st-focus
+xloadalpha(void)                                                          // st-focus
+{                                                                         // st-focus
+	float const usedAlpha = focused ? alpha : alphaUnfocused;             // st-focus
+	if (opt_alpha) alpha = strtof(opt_alpha, NULL);                       // st-focus
+	dc.col[defaultbg].color.alpha = (unsigned short)(0xffff * usedAlpha); // st-focus
+	dc.col[defaultbg].pixel &= 0x00FFFFFF;                                // st-focus
+	dc.col[defaultbg].pixel |= (unsigned char)(0xff * usedAlpha) << 24;   // st-focus
+}                                                                         // st-focus
+
 void
 xloadcols(void)
 {
-	int i;
+	// int i;
 	static int loaded;
 	Color *cp;
 
-	if (loaded) {
-		for (cp = dc.col; cp < &dc.col[dc.collen]; ++cp)
-			XftColorFree(xw.dpy, xw.vis, xw.cmap, cp);
-	} else {
-		dc.collen = MAX(LEN(colorname), 256);
-		dc.col = xmalloc(dc.collen * sizeof(Color));
-	}
+    /*                                                                  // st-focus
+	if (loaded) {                                                       // st-focus
+		for (cp = dc.col; cp < &dc.col[dc.collen]; ++cp)                // st-focus
+			XftColorFree(xw.dpy, xw.vis, xw.cmap, cp);                  // st-focus
+	} else {                                                            // st-focus
+		dc.collen = MAX(LEN(colorname), 256);                           // st-focus
+		dc.col = xmalloc(dc.collen * sizeof(Color));                    // st-focus
+	} */                                                                // st-focus
 
-	for (i = 0; i < dc.collen; i++)
+    if (!loaded) {                                                      // st-focus
+		dc.collen = 1 + (defaultbg = MAX(LEN(colorname), 256));         // st-focus
+		dc.col = xmalloc((dc.collen) * sizeof(Color));                  // st-focus
+ 	}                                                                   // st-focus
+                                                                        // st-focus
+// 	for (i = 0; i < dc.collen; i++)                                     // st-focus
+	for (int i = 0; i+1 < dc.collen; ++i)                               // st-focus
 		if (!xloadcolor(i, NULL, &dc.col[i])) {
 			if (colorname[i])
 				die("could not allocate color '%s'\n", colorname[i]);
 			else
 				die("could not allocate color %d\n", i);
 		}
+
+	if (dc.collen) // cannot die, as the color is already loaded.       // st-focus
+		xloadcolor(focused ?bg :bgUnfocused, NULL, &dc.col[defaultbg]); // st-focus
+                                                                        // st-focus
+	xloadalpha();                                                       // st-focus
 	loaded = 1;
 }
 
@@ -1138,11 +1165,24 @@ xinit(int cols, int rows)
 	Window parent;
 	pid_t thispid = getpid();
 	XColor xmousefg, xmousebg;
+	XWindowAttributes attr;                                               // st-focus
+	XVisualInfo vis;                                                      // st-focus
 
 	if (!(xw.dpy = XOpenDisplay(NULL)))
 		die("can't open display\n");
 	xw.scr = XDefaultScreen(xw.dpy);
-	xw.vis = XDefaultVisual(xw.dpy, xw.scr);
+// 	xw.vis = XDefaultVisual(xw.dpy, xw.scr);                              // st-focus
+
+	if (!(opt_embed && (parent = strtol(opt_embed, NULL, 0)))) {          // st-focus
+		parent = XRootWindow(xw.dpy, xw.scr);                             // st-focus
+		xw.depth = 32;                                                    // st-focus
+	} else {                                                              // st-focus
+		XGetWindowAttributes(xw.dpy, parent, &attr);                      // st-focus
+		xw.depth = attr.depth;                                            // st-focus
+	}                                                                     // st-focus
+                                                                          // st-focus
+	XMatchVisualInfo(xw.dpy, xw.scr, xw.depth, TrueColor, &vis);          // st-focus
+	xw.vis = vis.visual;                                                  // st-focus
 
 	/* font */
 	if (!FcInit())
@@ -1152,7 +1192,8 @@ xinit(int cols, int rows)
 	xloadfonts(usedfont, 0);
 
 	/* colors */
-	xw.cmap = XDefaultColormap(xw.dpy, xw.scr);
+// 	xw.cmap = XDefaultColormap(xw.dpy, xw.scr);                           // st-focus
+	xw.cmap = XCreateColormap(xw.dpy, parent, xw.vis, None);              // st-focus
 	xloadcols();
 
 	/* adjust fixed window geometry */
@@ -1172,19 +1213,22 @@ xinit(int cols, int rows)
 		| ButtonMotionMask | ButtonPressMask | ButtonReleaseMask;
 	xw.attrs.colormap = xw.cmap;
 
-	if (!(opt_embed && (parent = strtol(opt_embed, NULL, 0))))
-		parent = XRootWindow(xw.dpy, xw.scr);
+// 	if (!(opt_embed && (parent = strtol(opt_embed, NULL, 0))))            // st-focus
+// 		parent = XRootWindow(xw.dpy, xw.scr);                             // st-focus
 	xw.win = XCreateWindow(xw.dpy, parent, xw.l, xw.t,
-			win.w, win.h, 0, XDefaultDepth(xw.dpy, xw.scr), InputOutput,
+// 			win.w, win.h, 0, XDefaultDepth(xw.dpy, xw.scr), InputOutput,  // st-focus
+			win.w, win.h, 0, xw.depth, InputOutput,                       // st-focus
 			xw.vis, CWBackPixel | CWBorderPixel | CWBitGravity
 			| CWEventMask | CWColormap, &xw.attrs);
 
 	memset(&gcvalues, 0, sizeof(gcvalues));
 	gcvalues.graphics_exposures = False;
-	dc.gc = XCreateGC(xw.dpy, parent, GCGraphicsExposures,
-			&gcvalues);
-	xw.buf = XCreatePixmap(xw.dpy, xw.win, win.w, win.h,
-			DefaultDepth(xw.dpy, xw.scr));
+// 	dc.gc = XCreateGC(xw.dpy, parent, GCGraphicsExposures,                // st-focus
+// 			&gcvalues);                                                   // st-focus
+// 	xw.buf = XCreatePixmap(xw.dpy, xw.win, win.w, win.h,                  // st-focus
+// 			DefaultDepth(xw.dpy, xw.scr));                                // st-focus
+	xw.buf = XCreatePixmap(xw.dpy, xw.win, win.w, win.h, xw.depth);       // st-focus
+	dc.gc = XCreateGC(xw.dpy, xw.buf, GCGraphicsExposures, &gcvalues);    // st-focus
 	XSetForeground(xw.dpy, dc.gc, dc.col[defaultbg].pixel);
 	XFillRectangle(xw.dpy, xw.buf, dc.gc, 0, 0, win.w, win.h);
 
@@ -1781,12 +1825,22 @@ focus(XEvent *ev)
 		xseturgency(0);
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[I", 3, 0);
+		if (!focused) {                // st-focus
+			focused = 1;               // st-focus
+			xloadcols();               // st-focus
+			tfulldirt();               // st-focus
+		}                              // st-focus
 	} else {
 		if (xw.ime.xic)
 			XUnsetICFocus(xw.ime.xic);
 		win.mode &= ~MODE_FOCUSED;
 		if (IS_SET(MODE_FOCUS))
 			ttywrite("\033[O", 3, 0);
+		if (focused) {                 // st-focus
+			focused = 0;               // st-focus
+			xloadcols();               // st-focus
+			tfulldirt();               // st-focus
+		}                              // st-focus
 	}
 }
 
@@ -2039,6 +2093,9 @@ main(int argc, char *argv[])
 	case 'a':
 		allowaltscreen = 0;
 		break;
+	case 'A':
+		opt_alpha = EARGF(usage());
+		break;
 	case 'c':
 		opt_class = EARGF(usage());
 		break;
@@ -2090,6 +2147,7 @@ run:
 	XSetLocaleModifiers("");
 	cols = MAX(cols, 1);
 	rows = MAX(rows, 1);
+	defaultbg = MAX(LEN(colorname), 256);
 	tnew(cols, rows);
 	xinit(cols, rows);
 	xsetenv();
