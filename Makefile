@@ -21,7 +21,8 @@ config.h:
 .c.o:
 	$(CC) $(STCFLAGS) -c $<
 
-st.o: config.h st.h win.h
+# st.o: config.h st.h win.h                                  # st-meta-vim-full
+st.o: config.h st.h win.h normalMode.h normalMode.c utils.h  # st-meta-vim-full
 x.o: arg.h config.h st.h win.h
 
 $(OBJ): config.h config.mk
