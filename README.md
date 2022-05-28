@@ -1,6 +1,9 @@
 [st](https://st.suckless.org/)
 
 - [Patches](https://st.suckless.org/patches/)
+    - st-focus-20200731-43a395a.diff
+    - st-meta-vim-full-20210425-43a395a-8.4.patch
+    - st-rightclickpaste-0.8.2.diff
 
 
 # st - simple terminal
