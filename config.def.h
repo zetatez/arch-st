@@ -95,7 +95,7 @@ unsigned int tabspaces = 4;
 
 /* bg opacity */
 // float alpha = 0.72, alphaUnfocused = 0.64;
-float alpha = 0.64, alphaUnfocused = 0.16;
+float alpha = 0.64, alphaUnfocused = 0.32;
 
 /* Terminal colors (16 first used in escape sequence) */
 static const char *colorname[] = {
